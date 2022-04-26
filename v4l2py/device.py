@@ -207,6 +207,7 @@ def read_info(fd):
             try:
                 pixel_format = PixelFormat(fmt.pixelformat)
             except ValueError:
+                print(f"Unsupported pixel format: {raw.v4l2_fourcc2str(fmt.pixelformat)}")
                 continue
             formats.append(
                 ImageFormat(
