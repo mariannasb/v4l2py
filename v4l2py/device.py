@@ -162,6 +162,11 @@ def frame_sizes(fd, pixel_formats):
             sizes += get_frame_intervals(
                 pixel_format, size.discrete.width, size.discrete.height
             )
+        else:
+            step = size.stepwise
+            #looping through all sizes takes way too long, so use only min and max frame sizes
+            sizes += get_frame_intervals(pixel_format, step.min_width, step.min_height)
+            sizes += get_frame_intervals(pixel_format, step.max_width, step.max_height)
     return sizes
 
 
