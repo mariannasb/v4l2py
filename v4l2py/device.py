@@ -350,12 +350,20 @@ class VideoCapture:
         f.fmt.pix.width = width
         f.fmt.pix.height = height
         f.fmt.pix.bytesperline = 0
-        return self._ioctl(IOC.S_FMT, f)
+        try:
+            return self._ioctl(IOC.S_FMT, f)
+        except OSError as error:
+            #print(error.errno)
+            raise
 
     def get_format(self):
         f = raw.v4l2_format()
         f.type = self.buffer_type
-        self._ioctl(IOC.G_FMT, f)
+        try:
+            self._ioctl(IOC.G_FMT, f)
+        except OSError as error:
+            #print(error.errno)
+            raise
         return Format(
             width=f.fmt.pix.width,
             height=f.fmt.pix.height,
