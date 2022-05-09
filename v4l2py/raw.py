@@ -1018,7 +1018,7 @@ class v4l2_ext_control(ctypes.Structure):
             ("p_u8", ctypes.POINTER(ctypes.c_uint8)),
             ("p_u16", ctypes.POINTER(ctypes.c_uint16)),
             ("p_u32", ctypes.POINTER(ctypes.c_uint32)),
-            ("reserved", ctypes.c_void_p),
+            ("ptr", ctypes.c_void_p),
         ]
 
     _anonymous_ = ("_u",)

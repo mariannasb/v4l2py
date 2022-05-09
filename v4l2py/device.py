@@ -331,7 +331,7 @@ class Device:
                 break
             #print(f"name={queryctrl_ext.name}")
 
-            if not (queryctrl_ext.flags & raw.V4L2_CTRL_FLAG_DISABLED) and not (queryctrl_ext.type & raw.V4L2_CTRL_TYPE_CTRL_CLASS):
+            if not (queryctrl_ext.flags & raw.V4L2_CTRL_FLAG_DISABLED) and not (queryctrl_ext.type == raw.V4L2_CTRL_TYPE_CTRL_CLASS):
                 ret.append(copy.deepcopy(queryctrl_ext))
             queryctrl_ext.id |= (raw.V4L2_CTRL_FLAG_NEXT_CTRL | raw.V4L2_CTRL_FLAG_NEXT_COMPOUND)
 
@@ -347,32 +347,129 @@ class Device:
         for queryctrl in self.ctrl_list:
             if queryctrl.name.decode("UTF-8").lower() != name.lower():
                 continue
-            control = raw.v4l2_control(queryctrl.id)
-            try:
-            	self._ioctl(IOC.G_CTRL.value, control)
-            except OSError as error:
-            	#print(error.errno)
-            	raise
-            		
-            return control.value
+            if queryctrl.flags & raw.V4L2_CTRL_FLAG_HAS_PAYLOAD:
+                #print(f"has payload elems:{queryctrl.elems} elem_size:{queryctrl.elem_size}")
+                controls = raw.v4l2_ext_controls()
+                controls.count = 1
+                
+                control = raw.v4l2_ext_control()
+                control.id = queryctrl.id
+                if queryctrl.type == raw.V4L2_CTRL_TYPE_STRING:
+                    control.size = queryctrl.elems * queryctrl.elem_size + 1
+                else:
+                    control.size = queryctrl.elems * queryctrl.elem_size
+                data = ctypes.create_string_buffer(control.size)
+                control.ptr = ctypes.cast(ctypes.pointer(data), ctypes.c_void_p)
+                
+                controls.controls = ctypes.pointer(control)
+                try:
+               	    self._ioctl(IOC.G_EXT_CTRLS.value, controls)
+                except OSError as error:
+            	    #print(error.errno)
+            	    raise
+            	
+                if queryctrl.type == raw.V4L2_CTRL_TYPE_STRING:
+                    return ctypes.cast(control.string, ctypes.c_char_p).value.decode("UTF-8")
+            	
+                #print(f"size:{control.size} elems:{queryctrl.elems} elem_size:{queryctrl.elem_size}")
+                n_elems = int(control.size/queryctrl.elem_size)
+                if queryctrl.elem_size == 1:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint8))
+                elif queryctrl.elem_size == 2:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint16))
+                elif queryctrl.elem_size == 4:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint32))
+                else:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint8))
+                    n_elems = control.size
+                
+                #for i in range(0, n_elems):
+                #    print(arr[i])
+                return arr[:n_elems]
+            else:
+                control = raw.v4l2_control(queryctrl.id)
+                try:
+               	    self._ioctl(IOC.G_CTRL.value, control)
+                except OSError as error:
+            	    #print(error.errno)
+            	    raise
+                return control.value            
         raise ValueError("Failed to find control %s" % name)
+        
+    def ctrl_to_string(self, ctrl):
+        if isinstance(ctrl, raw.v4l2_control):
+            return f"v4l2_control: val={ctrl.value}"
+        elif isinstance(ctrl, raw.v4l2_ext_control):
+            print(f"v4l2_ext_control: size={ctrl.size}")
+        else:
+            return "Error, ctrl must be 'v4l2_control' or 'v4l2_ext_control'"
 
     def set_ctrl(self, name, value):
         for queryctrl in self.ctrl_list:
             if queryctrl.name.decode("UTF-8").lower() != name.lower():
                 continue
-            if value < queryctrl.minimum or value > queryctrl.maximum:
-                raise ValueError(
-                    "Require %d <= %d <= %d"
-                    % (queryctrl.minimum, value, queryctrl.maximum)
-                )
-            control = raw.v4l2_control(queryctrl.id, value)
-            try:
-                self._ioctl(IOC.S_CTRL.value, control)
-            except OSError as error:
-                #print(error.errno)
-                raise
-            return
+                
+            if queryctrl.flags & raw.V4L2_CTRL_FLAG_HAS_PAYLOAD:
+                controls = raw.v4l2_ext_controls()
+                controls.count = 1
+                
+                control = raw.v4l2_ext_control()
+                control.id = queryctrl.id
+                if queryctrl.type == raw.V4L2_CTRL_TYPE_STRING:
+                    control.size = queryctrl.elems * queryctrl.elem_size + 1
+                    #TODO
+                    return
+                else:
+                    control.size = queryctrl.elems * queryctrl.elem_size
+                
+                data = ctypes.create_string_buffer(control.size)
+                control.ptr = ctypes.cast(ctypes.pointer(data), ctypes.c_void_p)
+                
+                n_elems = queryctrl.elems
+                if queryctrl.elem_size == 1:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint8))
+                elif queryctrl.elem_size == 2:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint16))
+                elif queryctrl.elem_size == 4:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint32))
+                else:
+                    arr = ctypes.cast(control.ptr, ctypes.POINTER(ctypes.c_uint8))
+                    n_elems *= queryctrl.elem_size
+                
+                if len(value) > n_elems:
+                    raise ValueError(f"Incompatible sizes: {len(value)} > n_elems:{n_elems} ({queryctrl.elems}*{queryctrl.elem_size})")
+                
+                for i in range(0, n_elems):
+                    if i >= len(value):
+                        break
+                    if value[i] < queryctrl.minimum or value[i] > queryctrl.maximum:
+                        raise ValueError(
+                            "Require %d <= %d <= %d"
+                            % (queryctrl.minimum, value[i], queryctrl.maximum)
+                        )
+                    arr[i] = value[i]
+                
+                controls.controls = ctypes.pointer(control)
+                try:
+               	    self._ioctl(IOC.S_EXT_CTRLS.value, controls)
+                except OSError as error:
+            	    #print(error.errno)
+            	    raise
+                return
+            else:
+                if value < queryctrl.minimum or value > queryctrl.maximum:
+                    raise ValueError(
+                        "Require %d <= %d <= %d"
+                        % (queryctrl.minimum, value, queryctrl.maximum)
+                    )
+                
+                control = raw.v4l2_control(queryctrl.id, value)
+                try:
+                    self._ioctl(IOC.S_CTRL.value, control)
+                except OSError as error:
+                    #print(error.errno)
+                    raise
+                return
         raise ValueError("Failed to find control %s" % name)
 
 
