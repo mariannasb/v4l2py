@@ -98,13 +98,23 @@ VID_TYPE_MJPEG_ENCODER = 8192
 def v4l2_fourcc(a, b, c, d):
     return ord(a) | (ord(b) << 8) | (ord(c) << 16) | (ord(d) << 24)
 
+def v4l2_fourcc_be(a, b, c, d):
+    return (v4l2_fourcc(a, b, c, d) | (1 << 31))
+
 
 def v4l2_fourcc2str(fourcc):
+    be = False
+    if (fourcc >> 31):
+        be = True
+    fourcc = fourcc & 0x7FFFFFFF
     a = chr(fourcc & 0xFF)
     b = chr((fourcc >> 8) & 0xFF)
     c = chr((fourcc >> 16) & 0xFF)
     d = chr((fourcc >> 24) & 0xFF)
-    return "".join([a, b, c, d])
+    res = "".join([a, b, c, d])
+    if be:
+        res += "BE"
+    return res
 
 
 v4l2_field = enum
@@ -368,6 +378,7 @@ V4L2_PIX_FMT_RGB32 = v4l2_fourcc("R", "G", "B", "4")
 V4L2_PIX_FMT_GREY = v4l2_fourcc("G", "R", "E", "Y")
 V4L2_PIX_FMT_Y10 = v4l2_fourcc("Y", "1", "0", " ")
 V4L2_PIX_FMT_Y16 = v4l2_fourcc("Y", "1", "6", " ")
+V4L2_PIX_FMT_Y16_BE = v4l2_fourcc_be('Y', '1', '6', ' ')
 
 # Palette formats
 V4L2_PIX_FMT_PAL8 = v4l2_fourcc("P", "A", "L", "8")
@@ -409,6 +420,10 @@ V4L2_PIX_FMT_SGRBG10 = v4l2_fourcc("B", "A", "1", "0")
 V4L2_PIX_FMT_SRGGB10 = v4l2_fourcc("R", "G", "1", "0")
 V4L2_PIX_FMT_SGRBG10DPCM8 = v4l2_fourcc("B", "D", "1", "0")
 V4L2_PIX_FMT_SBGGR16 = v4l2_fourcc("B", "Y", "R", "2")
+
+# HSV formats
+V4L2_PIX_FMT_HSV24 = v4l2_fourcc('H', 'S', 'V', '3')
+V4L2_PIX_FMT_HSV32 = v4l2_fourcc('H', 'S', 'V', '4')
 
 # compressed formats
 V4L2_PIX_FMT_MJPEG = v4l2_fourcc("M", "J", "P", "G")
